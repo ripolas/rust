@@ -13,15 +13,8 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::<MyApp>::new(MyApp {
-                board: new_board(4, 4),
-                cards_open: 0,
-                first_opened_card: CardInfo {
-                    value: -1,
-                    show_result: false,
-                    card_cleared: false,
-                    x: 0,
-                    y: 0,
-                },
+                board: new_board(2, 2),
+                first_opened_card: None,
                 score: 0,
             }))
         }),
@@ -68,8 +61,7 @@ struct CardInfo {
 
 struct MyApp {
     board: Vec<Vec<CardInfo>>,
-    cards_open: i32,
-    first_opened_card: CardInfo,
+    first_opened_card: Option<CardInfo>,
     score: i32,
 }
 
@@ -80,7 +72,6 @@ impl eframe::App for MyApp {
                 ui.heading("Good job! You've won!");
                 if ui.button("Play again").clicked() {
                     self.score = 0;
-                    self.cards_open = 0;
                     self.board = new_board(self.board.len(), self.board[0].len());
                 }
             } else {
@@ -91,10 +82,6 @@ impl eframe::App for MyApp {
                             if self.board[i][j].card_cleared {
                                 ui.add_sized([100.0, 100.0], Label::new(""));
                             } else if self.board[i][j].show_result {
-                                // ui.add_sized(
-                                //     [100.0, 100.0],
-                                //     Label::new(format!("{}", self.board[i][j].value)),
-                                // );
                                 ui.add_sized(
                                     [100.0, 100.0],
                                     egui::Image::from_uri(format!(
@@ -102,26 +89,27 @@ impl eframe::App for MyApp {
                                         (self.board[i][j].value + 1)
                                     )),
                                 );
-                                //ui.image(egui::include_image!("../imgs/1.jpg"));
                             } else if ui.add_sized([100.0, 100.0], Button::new("")).clicked() {
-                                if self.cards_open >= 2 {
-                                    self.cards_open = 0;
-                                    self.board = close_cards(self.board.clone());
+                                match self.first_opened_card {
+                                    None => {
+                                        self.board = close_cards(self.board.clone());
+                                        self.first_opened_card = Some(self.board[i][j]);
+                                    }
+                                    Some(first_opened_card)
+                                        if (first_opened_card.value == self.board[i][j].value) =>
+                                    {
+                                        self.board[i][j].card_cleared = true;
+                                        self.board[first_opened_card.x as usize]
+                                            [first_opened_card.y as usize]
+                                            .card_cleared = true;
+                                        self.score += 2;
+                                        self.first_opened_card = None;
+                                    }
+                                    _ => {
+                                        self.first_opened_card = None;
+                                    }
                                 }
                                 self.board[i][j].show_result = true;
-                                self.cards_open += 1;
-                                if self.cards_open == 1 {
-                                    self.first_opened_card = self.board[i][j];
-                                }
-                                if self.cards_open == 2
-                                    && (self.first_opened_card.value == self.board[i][j].value)
-                                {
-                                    self.board[i][j].card_cleared = true;
-                                    self.board[self.first_opened_card.x as usize]
-                                        [self.first_opened_card.y as usize]
-                                        .card_cleared = true;
-                                    self.score += 2;
-                                }
                             }
                         }
                         ui.end_row();
