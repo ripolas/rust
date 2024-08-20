@@ -1,8 +1,12 @@
+use std::fs;
+
 use eframe::egui;
 use egui::{Button, Label};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 fn main() -> eframe::Result {
+    let w: usize = 4;
+    let h: usize = 4;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
@@ -10,17 +14,34 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "",
         options,
-        Box::new(|cc| {
+        Box::new(move |cc| {
             egui_extras::install_image_loaders(&cc.egui_ctx);
             Ok(Box::<MyApp>::new(MyApp {
-                board: new_board(2, 2),
+                board: new_board(w, h),
                 first_opened_card: None,
                 score: 0,
+                imgs: load_imgs((w * h / 2) as i32),
             }))
         }),
     )
 }
-
+fn load_imgs(n: i32) -> Vec<String> {
+    let mut vec: Vec<String> = Vec::new();
+    //let apikey: String = fs::read_to_string("apikey.txt").unwrap();
+    let res = reqwest::blocking::get("https://images-api.nasa.gov/search?q=star&media_type=image")
+        .unwrap()
+        .json::<serde_json::Value>()
+        .unwrap();
+    for i in 0..n {
+        vec.push(
+            res["collection"]["items"][i as usize]["links"][0]["href"]
+                .as_str()
+                .unwrap()
+                .to_string(),
+        );
+    }
+    return vec;
+}
 fn new_board(width: usize, height: usize) -> Vec<Vec<CardInfo>> {
     let mut tst: Vec<Vec<CardInfo>> = Vec::new();
     let nums: Vec<CardInfo> = (0..(width * height / 2))
@@ -63,6 +84,7 @@ struct MyApp {
     board: Vec<Vec<CardInfo>>,
     first_opened_card: Option<CardInfo>,
     score: i32,
+    imgs: Vec<String>,
 }
 
 impl eframe::App for MyApp {
@@ -84,10 +106,9 @@ impl eframe::App for MyApp {
                             } else if self.board[i][j].show_result {
                                 ui.add_sized(
                                     [100.0, 100.0],
-                                    egui::Image::from_uri(format!(
-                                        "file://../imgs/{}.jpg",
-                                        (self.board[i][j].value + 1)
-                                    )),
+                                    egui::Image::from_uri(
+                                        self.imgs[self.board[i][j].value as usize].clone(),
+                                    ),
                                 );
                             } else if ui.add_sized([100.0, 100.0], Button::new("")).clicked() {
                                 match self.first_opened_card {
