@@ -1,7 +1,8 @@
 use std::fs;
 
 use eframe::egui;
-use egui::{Button, Label};
+use egui::load::{ImageLoadResult, SizedTexture, TextureLoadResult, TexturePoll};
+use egui::{Button, Context, Image, Label, TextureOptions};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
 fn main() -> eframe::Result {
@@ -20,25 +21,43 @@ fn main() -> eframe::Result {
                 board: new_board(w, h),
                 first_opened_card: None,
                 score: 0,
-                imgs: load_imgs((w * h / 2) as i32),
+                imgs: (0..(w * h / 2)).map(|_| None).collect(),
             }))
         }),
     )
 }
-fn load_imgs(n: i32) -> Vec<String> {
-    let mut vec: Vec<String> = Vec::new();
+fn load_imgs(ctx: Context, n: i32) -> Vec<Option<SizedTexture>> {
+    let mut vec: Vec<Option<SizedTexture>> = Vec::new();
     //let apikey: String = fs::read_to_string("apikey.txt").unwrap();
-    let res = reqwest::blocking::get("https://images-api.nasa.gov/search?q=star&media_type=image")
-        .unwrap()
-        .json::<serde_json::Value>()
-        .unwrap();
+    let res = reqwest::blocking::get(
+        "https://images-api.nasa.gov/search?q=star&media_type=image&keywords=star&center=GSFC",
+    )
+    .unwrap()
+    .json::<serde_json::Value>()
+    .unwrap();
     for i in 0..n {
-        vec.push(
+        println!(
+            "{}",
             res["collection"]["items"][i as usize]["links"][0]["href"]
                 .as_str()
                 .unwrap()
-                .to_string(),
         );
+        while true {
+            let a = ctx.try_load_texture(
+                res["collection"]["items"][i as usize]["links"][0]["href"]
+                    .as_str()
+                    .unwrap(),
+                TextureOptions::default(),
+                egui::SizeHint::default(),
+            );
+            match a.unwrap() {
+                TexturePoll::Ready { texture } => {
+                    vec.push(Some(texture));
+                    break;
+                }
+                TexturePoll::Pending { size } => (),
+            }
+        }
     }
     return vec;
 }
@@ -84,12 +103,17 @@ struct MyApp {
     board: Vec<Vec<CardInfo>>,
     first_opened_card: Option<CardInfo>,
     score: i32,
-    imgs: Vec<String>,
+    imgs: Vec<Option<SizedTexture>>,
 }
-
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            if (self.imgs[0].is_none()) {
+                self.imgs = load_imgs(
+                    ctx.clone(),
+                    (self.board.len() * self.board[0].len() / 2) as i32,
+                );
+            }
             if self.score as usize >= self.board.len() * self.board[0].len() {
                 ui.heading("Good job! You've won!");
                 if ui.button("Play again").clicked() {
@@ -106,9 +130,11 @@ impl eframe::App for MyApp {
                             } else if self.board[i][j].show_result {
                                 ui.add_sized(
                                     [100.0, 100.0],
-                                    egui::Image::from_uri(
-                                        self.imgs[self.board[i][j].value as usize].clone(),
-                                    ),
+                                    Image::from_texture(
+                                        self.imgs[self.board[i][j].value as usize].unwrap(),
+                                    )
+                                    .max_width(100.0)
+                                    .max_height(100.0),
                                 );
                             } else if ui.add_sized([100.0, 100.0], Button::new("")).clicked() {
                                 match self.first_opened_card {
