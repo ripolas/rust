@@ -1,10 +1,10 @@
-use std::fs;
-
 use eframe::egui;
 use egui::load::{ImageLoadResult, SizedTexture, TextureLoadResult, TexturePoll};
 use egui::{Button, Context, Image, Label, TextureOptions};
 use rand::seq::SliceRandom;
 use rand::thread_rng;
+use std::fs;
+use std::time::SystemTime;
 fn main() -> eframe::Result {
     let w: usize = 4;
     let h: usize = 4;
@@ -22,6 +22,8 @@ fn main() -> eframe::Result {
                 first_opened_card: None,
                 score: 0,
                 imgs: (0..(w * h / 2)).map(|_| None).collect(),
+                frames_since_last: None,
+                clicks: 0,
             }))
         }),
     )
@@ -104,10 +106,13 @@ struct MyApp {
     first_opened_card: Option<CardInfo>,
     score: i32,
     imgs: Vec<Option<SizedTexture>>,
+    frames_since_last: Option<SystemTime>,
+    clicks: i32,
 }
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
+            ctx.request_repaint();
             if (self.imgs[0].is_none()) {
                 self.imgs = load_imgs(
                     ctx.clone(),
@@ -122,6 +127,12 @@ impl eframe::App for MyApp {
                 }
             } else {
                 ui.heading("Game");
+                if let Some(a) = self.frames_since_last {
+                    if a.elapsed().unwrap().as_millis() >= 1000 {
+                        self.board = close_cards(self.board.clone());
+                        self.frames_since_last = None;
+                    }
+                }
                 egui::Grid::new("grid").show(ui, |ui| {
                     for i in 0..self.board.len() {
                         for j in 0..self.board[0].len() {
@@ -139,6 +150,7 @@ impl eframe::App for MyApp {
                             } else if ui.add_sized([100.0, 100.0], Button::new("")).clicked() {
                                 match self.first_opened_card {
                                     None => {
+                                        self.frames_since_last = None;
                                         self.board = close_cards(self.board.clone());
                                         self.first_opened_card = Some(self.board[i][j]);
                                     }
@@ -151,9 +163,11 @@ impl eframe::App for MyApp {
                                             .card_cleared = true;
                                         self.score += 2;
                                         self.first_opened_card = None;
+                                        self.frames_since_last = Some(SystemTime::now());
                                     }
                                     _ => {
                                         self.first_opened_card = None;
+                                        self.frames_since_last = Some(SystemTime::now());
                                     }
                                 }
                                 self.board[i][j].show_result = true;
